@@ -17,7 +17,7 @@ func main() {
 	s := r.PathPrefix("/api").Subrouter()
 	s.Use(Authenticate)
 	s.HandleFunc("/vms", GetVMs).Methods("GET")
-	s.HandleFunc("/vms", CreateVm).Methods("POST")
+	s.HandleFunc("/vms", CreateVM).Methods("POST")
 
 	http.Handle("/", r)
 	log.Println("Server started at :8080")
@@ -25,13 +25,24 @@ func main() {
 }
 
 func GetVMs(w http.ResponseWriter, r *http.Request) {
-	var vms []VM
-	db.Find(&vms)
+	respChan := make(chan []VM)
+	dbOps <- func() {
+		var vms []VM
+		db.Find(&vms)
+		respChan <- vms
+	}
+	vms := <-respChan
 	json.NewEncoder(w).Encode(vms)
 }
-func CreateVm(w http.ResponseWriter, r *http.Request) {
-	var vm VM
-	json.NewDecoder(r.Body).Decode(&vm)
-	db.Create(&vm)
-	json.NewEncoder(w).Encode(vm)
+
+func CreateVM(w http.ResponseWriter, r *http.Request) {
+	respChan := make(chan VM)
+	dbOps <- func() {
+		var vm VM
+		json.NewDecoder(r.Body).Decode(&vm)
+		db.Create(&vm)
+		respChan <- vm
+	}
+	createdVM := <-respChan
+	json.NewEncoder(w).Encode(createdVM)
 }
